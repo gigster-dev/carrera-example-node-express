@@ -1,0 +1,45 @@
+version: 2.5.0
+spec:
+  name: cli250
+  environments:
+    - name: uat
+      provider: gigster-network
+      workflow: uat_pipeline
+    - name: dev
+      provider: gigster-network
+      workflow: dev_pipeline
+  services:
+    - name: web
+      endpoint: web
+      servicePath: ./
+      containerPort: "3000"
+      dockerfilePath: ./Dockerfile
+  providers:
+    - name: gigster-network
+      kind: gcp
+      spec:
+        region: "us-east1-c"
+        projectId: "gde-cli250"
+        kubeCtx: "gke_gde-core_us-east1-c_gde-core"
+        clusterName: "gde-core"
+        clusterProjectId: "gde-core"
+  workflows:
+    - name: dev_pipeline
+      jobs:
+        build:
+          requiresGitBranch: /feature\/.*|hotfix\/.*|fix\/.*|^develop$/
+        test:
+          requiresJob: build
+        push:
+          requiresJob: test
+          requiresGitBranch: develop
+        deploy:
+          requiresJob: push
+    - name: uat_pipeline
+      jobs:
+        build:
+          requiresGitBranch: master
+        push:
+          requiresJob: build
+        deploy:
+          requiresJob: push

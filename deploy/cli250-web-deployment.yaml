@@ -1,0 +1,28 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: cli250-web
+spec:
+  replicas: 1
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 2
+  revisionHistoryLimit: 10
+  minReadySeconds: 0
+  template:
+    metadata:
+      labels:
+        run: cli250-web
+    spec:
+      containers:
+        - name: cli250-web
+          image: __IMAGE__
+          imagePullPolicy: Always
+          envFrom:
+            - secretRef:
+                name: cli250-web-secrets
+            - configMapRef:
+                name: cli250-web-configmap
+          ports:
+            - containerPort: 3000

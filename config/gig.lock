@@ -1,0 +1,6 @@
+schema: 'https://schema.gigster.com/schemas/cli/2.0.0/gig.yaml'
+version: 2.0.0
+name: cli250
+description: test
+modules: []
+blocks: []

@@ -1,0 +1,4 @@
+**/.env
+**/*.env.*
+**/keys/**
+!**/*.env.*.encrypted.json

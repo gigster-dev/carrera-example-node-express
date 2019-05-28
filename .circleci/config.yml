@@ -1,0 +1,181 @@
+version: 2.1
+orbs:
+  aws-cli: circleci/aws-cli@0.1.8
+  kubectl: circleci/kubernetes@0.2.0
+  jq: circleci/jq@1.7.0
+
+uat_environment_vars: &uat_environment_vars
+  environment:
+    - ENVIRONMENT: uat
+    - CLUSTER_NAME: gde-core
+    - CLUSTER_ZONE: us-east1-c
+    - CLUSTER_PROJECT: gde-core
+
+dev_environment_vars: &dev_environment_vars
+  environment:
+    - ENVIRONMENT: dev
+    - CLUSTER_NAME: gde-core
+    - CLUSTER_ZONE: us-east1-c
+    - CLUSTER_PROJECT: gde-core
+
+gcp_runtime: &gcp_runtime
+  docker:
+    - image: google/cloud-sdk
+
+aws_cluster_setup: &aws_cluster_setup
+  run:
+    name: Set up credentials for CircleCI's service account
+    command: |
+      echo $K8S_CLUSTER_CA_BASE64 | base64 -d > ca.cert
+      K8S_USER="${K8S_CLUSTER_URL}-circle-sa"
+      kubectl config set-cluster $K8S_CLUSTER_URL --certificate-authority=ca.cert --server="https://api.${K8S_CLUSTER_URL}" --embed-certs=true
+      kubectl config set-context $K8S_CLUSTER_URL --cluster $K8S_CLUSTER_URL --user $K8S_USER
+      kubectl config set-credentials $K8S_USER --token $K8S_TOKEN
+      kubectl config use-context $K8S_CLUSTER_URL
+
+aws_login: &aws_login
+  run:
+    name: Set up credentials for CircleCI's service account
+    command: |
+      LOGIN_COMMAND=$(aws ecr get-login --no-include-email --region $AWS_REGION)
+      $LOGIN_COMMAND
+
+gcp_setup_credentials: &gcp_setup_credentials
+  run:
+    name: Set up credentials for CircleCI's service account
+    command: |
+      echo ${<< parameters.credentials_content_env >>} > ${HOME}/gcp-key.json
+      gcloud auth activate-service-account --key-file ${HOME}/gcp-key.json
+      gcloud container clusters get-credentials $CLUSTER_NAME --zone $CLUSTER_ZONE --project $CLUSTER_PROJECT
+
+build_steps: &build_steps
+  steps:
+    - checkout
+    - setup_remote_docker
+    - run:
+        name: Build
+        command: bash ./deploy/deploy-all.sh ${ENVIRONMENT} . build
+    - persist_to_workspace:
+        root: /tmp
+        paths:
+          - gig
+
+test_steps: &test_steps
+  steps:
+    - checkout
+    - setup_remote_docker
+    - attach_workspace:
+        at: /tmp
+    - run:
+        name: Run Tests
+        command: bash ./deploy/deploy-all.sh ${ENVIRONMENT} . test
+
+push_steps_gcp: &push_steps_gcp
+  parameters:
+    credentials_content_env:
+      type: string
+  steps:
+    - checkout
+    - setup_remote_docker
+    - *gcp_setup_credentials
+    - attach_workspace:
+        at: /tmp
+    - run:
+        name: Push
+        command: bash ./deploy/deploy-all.sh ${ENVIRONMENT} . push
+
+deploy_steps_gcp: &deploy_steps_gcp
+  parameters:
+    credentials_content_env:
+      type: string
+  steps:
+    - checkout
+    - setup_remote_docker
+    - jq/install
+    - *gcp_setup_credentials
+    - attach_workspace:
+        at: /tmp
+    - run:
+        name: Deploy
+        command: bash ./deploy/deploy-all.sh ${ENVIRONMENT} . deploy
+
+jobs:
+  build_uat:
+    <<: *gcp_runtime
+    <<: *uat_environment_vars
+    <<: *build_steps
+
+  test_uat:
+    <<: *gcp_runtime
+    <<: *uat_environment_vars
+    <<: *test_steps
+
+  push_uat:
+    <<: *gcp_runtime
+    <<: *uat_environment_vars
+    <<: *push_steps_gcp
+
+  deploy_uat:
+    <<: *gcp_runtime
+    <<: *uat_environment_vars
+    <<: *deploy_steps_gcp
+
+  build_dev:
+    <<: *gcp_runtime
+    <<: *dev_environment_vars
+    <<: *build_steps
+
+  test_dev:
+    <<: *gcp_runtime
+    <<: *dev_environment_vars
+    <<: *test_steps
+
+  push_dev:
+    <<: *gcp_runtime
+    <<: *dev_environment_vars
+    <<: *push_steps_gcp
+
+  deploy_dev:
+    <<: *gcp_runtime
+    <<: *dev_environment_vars
+    <<: *deploy_steps_gcp
+
+workflows:
+  version: 2
+
+  dev_pipeline:
+    jobs:
+    - build_dev:
+        filters:
+          branches:
+            only: /feature\/.*|hotfix\/.*|fix\/.*|^develop$/
+    - test_dev:
+        requires:
+          - build_dev
+    - push_dev:
+        credentials_content_env: GOOGLE_APPLICATION_CREDENTIALS_CONTENT_DEV
+        requires:
+          - test_dev
+        filters:
+          branches:
+            only: develop
+    - deploy_dev:
+        credentials_content_env: GOOGLE_APPLICATION_CREDENTIALS_CONTENT_DEV
+        requires:
+          - push_dev
+
+  uat_pipeline:
+    jobs:
+    - build_uat:
+        filters:
+          branches:
+            only: master
+    - push_uat:
+        credentials_content_env: GOOGLE_APPLICATION_CREDENTIALS_CONTENT_UAT
+        requires:
+          - build_uat
+    - deploy_uat:
+        credentials_content_env: GOOGLE_APPLICATION_CREDENTIALS_CONTENT_UAT
+        requires:
+          - push_uat
+
