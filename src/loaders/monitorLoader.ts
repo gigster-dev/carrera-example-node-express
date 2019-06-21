@@ -3,8 +3,14 @@ import monitor from 'express-status-monitor';
 import { MicroframeworkLoader, MicroframeworkSettings } from 'microframework-w3tec';
 
 import { env } from '../env';
-
-export const monitorLoader: MicroframeworkLoader = (settings: MicroframeworkSettings | undefined) => {
+/**
+ * EXPRESS TYPESCRIPT BOILERPLATE
+ * ----------------------------------------
+ *
+ * This is a boilerplate for Node.js Application written in TypeScript.
+ * The basic layer of this app is express. For further information visit
+ * the 'README.md' file.
+ */export const monitorLoader: MicroframeworkLoader = (settings: MicroframeworkSettings | undefined) => {
     if (settings && env.monitor.enabled) {
         const expressApp = settings.getData('express_app');
 
