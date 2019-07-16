@@ -80,7 +80,7 @@
     "typescript": "3.0.3",
     "uuid": "^3.3.2",
     "winston": "3.1.0",
-    "yarn": "^1.16.0"
+    "yarn": "^1.17.3"
   },
   "resolutions": {
     "**/event-stream": "^4.0.1"
